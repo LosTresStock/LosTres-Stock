@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+    <title>LosTres Stock – Control de Inventario</title>
+    <style>
+        /* Variables CSS para el tema oscuro */
+        :root {
+            --bg: #121212;
+            --fg: #fff;
+            --accent: #ff4444;
+            --panel: #1e1e1e;
+            --panel-light: #282828;
+            --input: #2e2e2e;
+            --border: #444;
+            --error: #ff0000; /* Color para errores */
+        }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { background:var(--bg); color:var(--fg); font-family:Arial, sans-serif; line-height: 1.6; }
+        h1 { font-size:2.5rem; text-align:center; margin:1rem 0; color: var(--accent); }
+        h2,h3 { margin:0.8rem 0 0.4rem; color: var(--fg); }
+        button {
+            background:var(--accent); color:#fff; border:none;
+            padding:0.6rem 1rem; border-radius:4px; cursor:pointer;
+            font-size:1rem; margin:0.3rem 0; transition: background 0.2s ease;
+        }
+        button:hover { background: #e03939; }
+        button:active { background: #c02f2f; }
+        /* Usamos !important para asegurar que la clase hidden funcione */
+        .hidden { display:none !important; }
+
+        .form-row { display:flex; align-items:center; margin:0.6rem 0; gap: 10px; }
+        .form-row label {
+            width:150px;
+            font-weight:bold; font-size:1rem;
+            flex-shrink: 0;
+        }
+        .form-row input,
+        .form-row select,
+        .form-row textarea {
+            flex:1; padding:0.6rem; background:var(--input);
+            border:1px solid var(--border); border-radius:4px;
+            color:#fff; font-size:1rem;
+        }
+        textarea { resize:vertical; min-height: 60px; }
+
+        #login, #app {
+            max-width:800px; margin:2rem auto; padding:1rem;
+            background:var(--panel); border-radius:6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        /* REMOVIDO: display:none; de la regla #report para que sea controlada SOLO por la clase hidden */
+        #report {
+            background:var(--panel-light);
+            padding:1rem; border-radius:6px; margin:1rem 0;
+        }
+        #report div { margin-bottom: 0.5rem; }
+
+        /* —— Ajustes específicos de stock —— */
+        #stock-list { width:100%; }
+        #stock-list .row {
+            display:flex; align-items: center;
+            gap:0.5rem; margin:0.5rem 0;
+            background: var(--input);
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+         #stock-list .row > * {
+             flex: 1;
+             padding:0.4rem;
+             background: var(--panel);
+             border:1px solid var(--border);
+             border-radius:4px; color:#fff;
+             font-size:0.9rem;
+        }
+         #stock-list .row select {
+             flex: 2;
+             padding:0.4rem;
+             background: var(--panel);
+             border:1px solid var(--border);
+             border-radius:4px; color:#fff;
+             font-size:0.9rem;
+         }
+        .stock-qty-input { flex: 1 !important; min-width: 60px; }
+
+        .btn-remove-stock {
+            background: none;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            padding: 0;
+            margin: 0 0 0 0.5rem;
+            font-size: 1.2rem;
+            transition: color 0.2s ease;
+            flex-shrink: 0;
+            width: 30px;
+            text-align: center;
+        }
+        .btn-remove-stock:hover { color: #e03939; background: none; }
+        .btn-remove-stock:active { color: #c02f2f; background: none; }
+
+
+        #btnAddStock { /* Solo queda btnAddStock */
+             margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+
+
+    </style>
+</head>
+<body>
+
+    <section id="login">
+        <h2>🔑 Identifícate</h2>
+        <p style="color: var(--error); font-size: 0.9em; margin-bottom: 1rem;">
+            ⚠️ Nota de Seguridad: Las contraseñas se guardan en texto plano en el navegador (localStorage). Esto NO es seguro para datos sensibles.
+        </p>
+        <div class="form-row">
+            <label for="selUser">Usuario:</label>
+            <select id="selUser"><option value="" disabled selected>Selecciona un usuario</option></select>
+        </div>
+         <div class="form-row">
+            <label for="inpPass">Contraseña:</label>
+            <input id="inpPass" type="password" placeholder="••••••"/>
+        </div>
+        <button id="btnLogin">Entrar</button>
+        <hr style="border-color:var(--border); margin:1.2rem 0;"/>
+        <h3>👤 Gestión de usuarios</h3>
+        <div class="form-row">
+            <label for="newUser">Nuevo usuario:</label>
+            <input id="newUser" placeholder="Nombre del usuario"/>
+        </div>
+         <div class="form-row">
+            <label for="newPass">Contraseña:</label>
+            <input id="newPass" type="password" placeholder="••••••"/>
+        </div>
+        <button id="btnAddUser">➕ Agregar usuario</button>
+        <button id="btnDelUser">🗑️ Eliminar usuario seleccionado</button>
+         </section>
+
+    <section id="app" class="hidden">
+        <h1>📦 LosTres Stock</h1>
+        <div style="text-align:right; margin-bottom:1rem;">
+            <button id="btnReport">📊 Informe</button>
+             <button id="btnChangePw">🔒 Cambiar contraseña</button>
+            <button id="btnLogout">🚪 Salir</button>
+        </div>
+
+        <section id="report" class="hidden">
+            <h2>📅 Informe</h2>
+            <div id="ventasSemana">Ventas esta semana: $0</div>
+            <div id="gananciaSemana">Ganancia semana: $0</div>
+            <div id="ventasMes">Ventas este mes: $0</div>
+            <div id="gananciaMes">Ganancia mes: $0</div>
+            <div id="stockValor">Stock valorizado: $0</div>
+            <button id="btnCloseReport" style="margin-top: 1rem;">Cerrar Informe</button>
+        </section>
+
+        <h2>📝 Producto</h2>
+        <div class="form-row"><label for="prodName">Nombre:</label><input id="prodName"/></div>
+        <div class="form-row"><label for="prodPrice">Precio Venta:</label><input id="prodPrice" type="number" min="0" value="0"/></div>
+        <div class="form-row"><label for="prodCost">Costo:</label><input id="prodCost" type="number" min="0" value="0"/></div>
+        <div class="form-row"><label for="prodDesc">Descripción:</label><textarea id="prodDesc" rows="2"></textarea></div>
+
+        <h3>Stock por color / ubicación</h3>
+        <div id="stock-list">
+             <div class="row header" style="font-weight: bold; border: none; background: none; padding: 0 0.5rem;">
+                 <label style="width: auto; flex: 2;">Color</label>
+                 <label style="width: auto; flex: 1;">Julio</label>
+                 <label style="width: auto; flex: 1;">Fabián</label>
+                 <label style="width: auto; flex: 1;">Marcelo</label>
+                 <div style="width: 30px;"></div>
+             </div>
+        </div>
+        <button id="btnAddStock">➕ Agregar color</button>
+        <div style="margin-top:1.5rem; text-align: center;">
+            <button id="btnSaveProd">💾 Guardar producto</button>
+             <button id="btnClearForm">🧹 Limpiar formulario</button>
+        </div>
+         <h2>📋 Productos Disponibles</h2>
+        <div id="product-list">
+            </div>
+    </section>
+
+    <dialog id="dlgStock">
+        <form method="dialog">
+            <h3 id="dlgTitle">Título</h3>
+            <label>Color:
+                <select id="dlgColor"></select>
+            </label>
+            <label>Ubicación:
+                <select id="dlgUser">
+                     </select>
+            </label>
+            <label>Cantidad:
+                <input id="dlgQty" type="number" min="1" value="1"/>
+            </label>
+            <menu>
+                <button value="cancel">Cancelar</button>
+                <button id="btnDlgConfirm" value="confirm">Aceptar</button>
+            </menu>
+        </form>
+    </dialog>
+
+    <script>
+    (function(){ // IIFE para no contaminar el scope global
+
+        // --- Constantes y Referencias a Elementos del DOM ---
+        // Se elimina POST_URL si no se usa sync con Google Sheets
+        // const POST_URL = 'https://script.google.com/macros/s/AKfycbxR5vU_G757tPO7QRuecoSk9oAWBzhmuyOpHhZqB5rPAQ0EcPLqveEbSF2zv7xDAe1s/exec';
+        const STORAGE_KEYS = {
+            USERS: 'losTresStock_users_pw', // Cambiado el nombre para evitar conflicto con versiones sin PW
+            PRODUCTS: 'losTresStock_products',
+            MOVEMENTS: 'losTresStock_movements'
+        };
+
+        // Elementos del DOM - Login/Usuarios
+        const selUser = document.getElementById('selUser');
+        const inpPass = document.getElementById('inpPass'); // Re-agregado
+        const newUser = document.getElementById('newUser');
+        const newPass = document.getElementById('newPass'); // Re-agregado
+        const btnLogin = document.getElementById('btnLogin');
+        const btnAddUser = document.getElementById('btnAddUser');
+        const btnDelUser = document.getElementById('btnDelUser');
+        const paneLogin = document.getElementById('login');
+
+        // Elementos del DOM - App Principal
+        const paneApp = document.getElementById('app');
+        const btnLogout = document.getElementById('btnLogout');
+        const btnChangePw = document.getElementById('btnChangePw'); // Re-agregado
+        const btnReport = document.getElementById('btnReport');
+        const reportSec = document.getElementById('report');
+        const btnCloseReport = document.getElementById('btnCloseReport');
+
+        // Elementos del DOM - Formulario de Producto
+        const prodName = document.getElementById('prodName');
+        const prodPrice = document.getElementById('prodPrice');
+        const prodCost = document.getElementById('prodCost');
+        const prodDesc = document.getElementById('prodDesc');
+        const stockList = document.getElementById('stock-list'); // Contenedor de filas de stock
+        const btnAddStock = document.getElementById('btnAddStock');
+        const btnSaveProd = document.getElementById('btnSaveProd');
+        const btnClearForm = document.getElementById('btnClearForm'); // Botón limpiar formulario
+
+        // Elementos del DOM - Lista de Productos
+        const prodList = document.getElementById('product-list'); // Contenedor de tarjetas de producto
+
+        // Elementos del DOM - Diálogo Stock
+        const dlg = document.getElementById('dlgStock');
+        const dlgTitle = document.getElementById('dlgTitle');
+        const dlgColor = document.getElementById('dlgColor');
+        const dlgUser = document.getElementById('dlgUser');
+        const dlgQty = document.getElementById('dlgQty');
+        const btnDlgConfirm = document.getElementById('btnDlgConfirm'); // Botón de confirmación del diálogo
+
+        // Elementos del DOM - Escáner QR (eliminados, referencias JS también)
+        // const btnScan = document.getElementById('btnScan');
+        // const readerContainer = document.getElementById('reader');
+        // const readerTarget = document.getElementById('reader-target');
+        // const btnCloseScanner = document.getElementById('btnCloseScanner');
+        // let html5QrcodeScanner = null;
+
+        // --- Datos de la Aplicación ---
+        // Cargar datos desde localStorage (ahora incluyendo password en users)
+        let users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+        let products = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
+        let movements = JSON.parse(localStorage.getItem(STORAGE_KEYS.MOVEMENTS) || '[]');
+        let currentUser = null; // Usuario logueado actualmente
+
+        // --- Estado de la UI ---
+        let editingId = null; // ID del producto que se está editando
+        let dlgAction = null; // Acción del diálogo (sell/restock)
+        let dlgProdId = null; // ID del producto para el diálogo
+
+        // --- Funciones de Utilidad ---
+
+         // Función para formatear números con espacio como separador de miles
+         function formatNumberWithSpaces(number, decimalPlaces = 0) {
+             if (typeof number !== 'number' || isNaN(number)) {
+                 return number; // Devuelve el valor original si no es un número válido
+             }
+             // Usa el locale 'es-ES' que usa punto para miles y coma para decimales
+             let formatted = number.toLocaleString('es-ES', {
+                 minimumFractionDigits: decimalPlaces, // Controla los decimales
+                 maximumFractionDigits: decimalPlaces, // Controla los decimales
+                 useGrouping: true // Asegura el agrupamiento de miles
+             });
+             // Reemplaza el punto (separador de miles en es-ES) por un espacio
+             formatted = formatted.replace(/\./g, ' ');
+             // La coma como separador decimal (en es-ES) se mantiene si decimalPlaces > 0
+
+             return formatted;
+         }
+
+
+        // Guarda todos los datos en localStorage
+        function saveAll() {
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+            localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(movements));
+             console.log('Datos guardados en localStorage.');
+        }
+
+        // Actualiza el dropdown de usuarios en el login y en el diálogo de stock
+        function refreshUserDropdowns() {
+            // Actualizar dropdown de login
+            selUser.innerHTML = '<option value="" disabled selected>Selecciona un usuario</option>' +
+                                users.map(u => `<option value="${u.username}">${u.username}</option>`).join('');
+
+            // Actualizar dropdown de usuario/ubicación en el diálogo
+            dlgUser.innerHTML = users.map(u => `<option value="${u.username.toLowerCase()}">${u.username}</option>`).join('');
+        }
+
+        // Crea la estructura HTML para una fila de stock en el formulario de producto
+        function makeStockRow(stockData = { color: '', julio: 0, fabian: 0, marcelo: 0 }) {
+            const div = document.createElement('div');
+            div.className = 'row';
+            div.innerHTML = `
+                <select class="stkColor">
+                    ${['Rojo', 'Blanco', 'Negro', 'Gris', 'Azul', 'Verde', 'Amarillo', 'Violeta', 'Celeste', 'Naranja', 'Marrón', 'Rosa', 'Otro']
+                      .map(c => `<option value="${c}" ${c === stockData.color ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+                <input class="stkJulio stock-qty-input" type="number" min="0" value="${stockData.julio}"/>
+                <input class="stkFabian stock-qty-input" type="number" min="0" value="${stockData.fabian}"/>
+                <input class="stkMarcelo stock-qty-input" type="number" min="0" value="${stockData.marcelo}"/>
+                <button class="btn-remove-stock" type="button" title="Eliminar fila">✖️</button>
+            `;
+             // Agregar el listener al botón de eliminar dentro de la fila
+            div.querySelector('.btn-remove-stock').addEventListener('click', function() {
+                 div.remove(); // Elimina la fila del DOM
+            });
+            return div;
+        }
+
+        // Limpia el formulario de producto y el estado de edición
+        function clearForm() {
+            editingId = null;
+            prodName.value = '';
+            prodPrice.value = '0';
+            prodCost.value = '0';
+            prodDesc.value = '';
+            stockList.querySelectorAll('.row:not(.header)').forEach(row => row.remove());
+             console.log('Formulario limpiado.');
+        }
+
+        // Renderiza la lista de productos
+        function renderProducts() {
+            prodList.innerHTML = '';
+            if (products.length === 0) {
+                 prodList.innerHTML = '<p style="text-align: center; color: #888;">No hay productos guardados.</p>';
+            } else {
+                products.forEach(p => {
+                    const dotColor = p.stock.length > 0 ? p.stock[0].color.toLowerCase() : 'gray';
+                    const stkHtml = p.stock.map(s => {
+                         const julioQty = s.julio || 0;
+                         const fabianQty = s.fabian || 0;
+                         const marceloQty = s.marcelo || 0;
+                        return `
+                            <div>
+                                <span class="dot" style="background:${s.color.toLowerCase() === 'otro' ? 'gray' : s.color.toLowerCase()}"></span>
+                                <strong>${s.color}:</strong>
+                                Julio ${formatNumberWithSpaces(julioQty, 0)}, Fabián ${formatNumberWithSpaces(fabianQty, 0)}, Marcelo ${formatNumberWithSpaces(marceloQty, 0)}
+                            </div>`; // Formateo de cantidades (sin decimales)
+                    }).join('');
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div class="btns">
+                            <button onclick="window.editProduct(${p.id})" title="Editar">✏️</button>
+                            <button onclick="window.deleteProduct(${p.id})" title="Eliminar">🗑️</button>
+                            <button onclick="window.showStockDialog('sell',${p.id})" title="Vender">🚪 Vender</button>
+                            <button onclick="window.showStockDialog('restock',${p.id})" title="Agregar Stock">➕ Agregar</button>
+                            <button onclick="window.shareWhatsApp(${p.id})" title="Compartir por WhatsApp">📲 WA</button>
+                        </div>
+                        <h3><span class="dot" style="background:${dotColor === 'otro' ? 'gray' : dotColor}"></span>${p.name}</h3>
+                        <p>Precio Venta: $${formatNumberWithSpaces((p.price || 0), 2)}</p> ${(p.cost || 0) > 0 ? `<p>Costo: $${formatNumberWithSpaces((p.cost || 0), 2)}</p>` : ''} ${p.desc ? `<p>Descripción: ${p.desc}</p>` : ''}
+                         ${stkHtml ? `<h4>Stock:</h4>${stkHtml}` : '<p>Sin stock registrado.</p>'}
+                    `;
+                    prodList.appendChild(card);
+                });
+            }
+             console.log('Productos renderizados.');
+        }
+
+        // --- Inicialización ---
+
+        // Si no hay usuarios, añadir los predefinidos (AHORA CON CONTRASEÑAS)
+        if (users.length === 0) {
+            users = [
+                { username: 'Marcelo', password: 'marcelo' },
+                { username: 'Fabian', password: 'fabian' },
+                { username: 'Julio', password: 'julio' }
+            ];
+            saveAll(); // Guardar los usuarios iniciales con contraseñas
+        }
+        // Actualizar los dropdowns de usuario al cargar la página
+        refreshUserDropdowns();
+         // Renderizar los productos al cargar la página (estarán ocultos hasta el login)
+         renderProducts();
+
+
+        // --- Manejadores de Eventos - Login/Usuarios ---
+
+        btnAddUser.onclick = () => {
+            const u = newUser.value.trim();
+            const p = newPass.value.trim(); // Capturar nueva contraseña
+            if (!u || !p) { // Validar que ambos campos estén llenos
+                alert('Por favor, ingresa nombre de usuario Y contraseña.');
+                return;
+            }
+            if (users.some(x => x.username.toLowerCase() === u.toLowerCase())) {
+                alert('El usuario ya existe.');
+                return;
+            }
+            users.push({ username: u, password: p }); // Guardar usuario y contraseña
+            saveAll();
+            refreshUserDropdowns();
+            newUser.value = '';
+            newPass.value = ''; // Limpiar campo de contraseña
+             alert(`Usuario "${u}" agregado.`);
+        };
+
+        btnDelUser.onclick = () => {
+            const u = selUser.value;
+            if (!u) {
+                alert('Por favor, selecciona un usuario para eliminar.');
+                return;
+            }
+            if (!confirm(`¿Estás seguro de eliminar al usuario "${u}"? Esto no eliminará los movimientos históricos asociados a este nombre.`)) {
+                return;
+            }
+            users = users.filter(x => x.username !== u);
+            // movements = movements.filter(m => m.user !== u); // Opcional: eliminar movimientos
+            saveAll();
+            refreshUserDropdowns();
+            if (currentUser === u) {
+                btnLogout.click(); // Cerrar sesión si el usuario eliminado era el actual
+            }
+            alert(`Usuario "${u}" eliminado.`);
+        };
+
+        btnLogin.onclick = () => {
+            const u = selUser.value;
+            const pw = inpPass.value; // Capturar contraseña ingresada
+            if (!u || !pw) { // Validar que ambos campos estén llenos
+                 alert('Por favor, selecciona usuario e ingresa contraseña.');
+                 return;
+            }
+            const user = users.find(x => x.username === u);
+            // Verificar usuario y contraseña
+            if (!user || user.password !== pw) {
+                 alert('Credenciales inválidas.');
+                 inpPass.value = ''; // Limpiar campo de contraseña en caso de fallo
+                 return;
+            }
+
+            currentUser = u; // Establecer usuario logueado
+            inpPass.value = ''; // Limpiar campo de contraseña después de login exitoso
+            paneLogin.classList.add('hidden'); // Ocultar login
+            paneApp.classList.remove('hidden'); // Mostrar app
+            console.log(`Usuario "${currentUser}" ha iniciado sesión.`);
+            // renderProducts(); // Ya se renderizan al inicio, pero se puede refrescar si es necesario.
+        };
+
+        btnLogout.onclick = () => {
+            currentUser = null; // Limpiar usuario logueado
+            paneApp.classList.add('hidden'); // Ocultar app
+            paneLogin.classList.remove('hidden'); // Mostrar login
+            selUser.value = ''; // Limpiar selector de usuario
+            inpPass.value = ''; // Limpiar campo de contraseña
+            clearForm(); // Limpiar formulario de producto
+            reportSec.classList.add('hidden'); // Ocultar informe
+            console.log('Sesión cerrada.');
+        };
+
+         // Manejador para cambiar contraseña (re-agregado)
+         btnChangePw.onclick = () => {
+             if (!currentUser) {
+                 alert('Debes estar logueado para cambiar la contraseña.');
+                 return;
+             }
+             const user = users.find(x => x.username === currentUser);
+             if (!user) {
+                 // Esto no debería pasar si currentUser está establecido correctamente
+                 alert('Error interno: usuario no encontrado.');
+                 return;
+             }
+
+             const oldPass = prompt('Ingresa tu contraseña actual:');
+             if (oldPass !== user.password) {
+                 alert('Contraseña actual incorrecta.');
+                 return;
+             }
+
+             const newPass1 = prompt('Ingresa la nueva contraseña:');
+             if (!newPass1) {
+                 alert('La nueva contraseña no puede estar vacía.');
+                 return;
+             }
+
+             const newPass2 = prompt('Confirma la nueva contraseña:');
+             if (newPass1 !== newPass2) {
+                 alert('Las nuevas contraseñas no coinciden.');
+                 return;
+             }
+
+             user.password = newPass1; // Actualizar contraseña
+             saveAll(); // Guardar el cambio en localStorage
+             alert('Contraseña cambiada exitosamente.');
+             console.log(`Contraseña cambiada para el usuario "${currentUser}".`);
+         };
+
+
+        // --- Manejadores de Eventos - App Principal ---
+
+        btnReport.onclick = () => {
+            // Ocultar el informe si ya está visible
+            if (!reportSec.classList.contains('hidden')) {
+                 reportSec.classList.add('hidden');
+                 console.log('Informe ocultado.');
+                 return;
+            }
+
+            // Calcular fechas para el informe
+            const now = Date.now();
+            const startOfWeek = new Date();
+            // CORRECCIÓN: Calcular correctamente el inicio de la semana (Domingo a las 00:00:00)
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Restar el número de días para llegar al domingo
+            startOfWeek.setHours(0, 0, 0, 0); // Establecer la hora al inicio del día
+
+
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            startOfMonth.setHours(0, 0, 0, 0);
+
+            let ventasSemana = 0, gananciaSemana = 0;
+            let ventasMes = 0, gananciaMes = 0;
+
+            // Calcular ventas y ganancias a partir de movimientos de tipo 'sell'
+            movements.filter(m => m.type === 'sell').forEach(m => {
+                const p = products.find(x => x.id === m.prodId);
+                if (!p || !m.qty || p.price === undefined || p.price === null) {
+                     console.warn('Movimiento o producto inválido encontrado en el cálculo:', m, p);
+                     return;
+                }
+
+                const sale = p.price * m.qty;
+                const prof = (p.price - (p.cost || 0)) * m.qty;
+
+                // Comparar la fecha del movimiento con el inicio de la semana y el inicio del mes
+                if (m.date >= startOfWeek.getTime()) {
+                    ventasSemana += sale;
+                    gananciaSemana += prof;
+                }
+                 if (m.date >= startOfMonth.getTime()) {
+                    ventasMes += sale;
+                    gananciaMes += prof;
+                }
+            });
+
+            // Calcular valorización del stock total
+            let stockValor = 0;
+            products.forEach(p => {
+                 if (!p.stock || p.price === undefined || p.price === null) {
+                      console.warn('Producto sin stock o precio válido encontrado en el cálculo:', p);
+                      return;
+                 }
+                 p.stock.forEach(s => {
+                     const totalQty = (s.julio || 0) + (s.fabian || 0) + (s.marcelo || 0);
+                     stockValor += totalQty * p.price;
+                 });
+            });
+
+            // Actualizar los elementos del informe con formato SIN DECIMALES
+            document.getElementById('ventasSemana').textContent = `Ventas esta semana: $${formatNumberWithSpaces(ventasSemana, 0)}`; // *** SIN DECIMALES ***
+            document.getElementById('gananciaSemana').textContent = `Ganancia esta semana: $${formatNumberWithSpaces(gananciaSemana, 0)}`; // *** SIN DECIMALES ***
+            document.getElementById('ventasMes').textContent = `Ventas este mes: $${formatNumberWithSpaces(ventasMes, 0)}`; // *** SIN DECIMALES ***
+            document.getElementById('gananciaMes').textContent = `Ganancia este mes: $${formatNumberWithSpaces(gananciaMes, 0)}`; // *** SIN DECIMALES ***
+            document.getElementById('stockValor').textContent = `Stock valorizado (Precio Venta): $${formatNumberWithSpaces(stockValor, 0)}`; // *** SIN DECIMALES ***
+
+
+            // Mostrar el informe y desplazar la vista
+            reportSec.classList.remove('hidden');
+            reportSec.scrollIntoView({ behavior: 'smooth' });
+             console.log('Informe generado y mostrado.');
+        };
+
+         btnCloseReport.onclick = () => {
+              reportSec.classList.add('hidden');
+              console.log('Informe ocultado por botón.');
+         };
+
+
+        // --- Manejadores de Eventos - Formulario Producto ---
+
+        btnAddStock.onclick = () => {
+             const headerRow = stockList.querySelector('.row.header');
+             const newRow = makeStockRow();
+             if(headerRow) {
+                stockList.insertBefore(newRow, headerRow.nextSibling);
+             } else {
+                stockList.appendChild(newRow);
+             }
+              console.log('Fila de stock añadida.');
+        };
+
+         btnClearForm.onclick = () => {
+              if(editingId || prodName.value || parseFloat(prodPrice.value) > 0 || parseFloat(prodCost.value) > 0 || prodDesc.value || stockList.querySelectorAll('.row:not(.header)').length > 0) {
+                   if(confirm('¿Estás seguro de limpiar el formulario? Los cambios no guardados se perderán.')){
+                        clearForm();
+                   }
+              } else {
+                   clearForm();
+              }
+              console.log('Botón Limpiar clickeado.');
+         };
+
+
+        btnSaveProd.onclick = () => {
+            const name = prodName.value.trim();
+            const price = parseFloat(prodPrice.value);
+            const cost = parseFloat(prodCost.value);
+            const desc = prodDesc.value.trim();
+
+            if (!name) {
+                alert('El nombre del producto es requerido.');
+                return;
+            }
+            if (isNaN(price) || price < 0) {
+                alert('El precio de venta debe ser un número positivo o cero.');
+                return;
+            }
+            if (isNaN(cost) || cost < 0) {
+                 alert('El costo debe ser un número positivo o cero.');
+                 return;
+            }
+
+            const stk = Array.from(stockList.querySelectorAll('.row:not(.header)')).map(row => {
+                const color = row.querySelector('.stkColor').value;
+                const julio = parseInt(row.querySelector('.stkJulio').value) || 0;
+                const fabian = parseInt(row.querySelector('.stkFabian').value) || 0;
+                const marcelo = parseInt(row.querySelector('.stkMarcelo').value) || 0;
+
+                return { color, julio, fabian, marcelo };
+            });
+
+             const colors = stk.map(s => s.color.toLowerCase());
+             const hasDuplicates = (new Set(colors)).size !== colors.length;
+             if (hasDuplicates) {
+                 alert('No se permiten colores duplicados para el mismo producto.');
+                 return;
+             }
+
+
+            if (editingId) {
+                const idx = products.findIndex(x => x.id === editingId);
+                 if (idx === -1) {
+                     console.error('Error: Intentando editar producto con ID inexistente:', editingId);
+                     alert('Error al intentar editar el producto. Guardando como nuevo.');
+                     const id = Date.now();
+                     products.push({ id, name, price, cost, desc, stock: stk });
+                     const initialStockCopy = stk.map(s => ({...s}));
+                     movements.push({ user: currentUser, prodId: id, type: 'init', stock: initialStockCopy, date: Date.now() });
+
+                 } else {
+                      products[idx] = { id: editingId, name, price, cost, desc, stock: stk };
+                      console.log(`Producto con ID ${editingId} actualizado.`);
+                 }
+
+            } else {
+                const id = Date.now();
+                products.push({ id, name, price, cost, desc, stock: stk });
+                const initialStockCopy = stk.map(s => ({...s}));
+                movements.push({ user: currentUser, prodId: id, type: 'init', stock: initialStockCopy, date: Date.now() });
+                 console.log(`Nuevo producto creado con ID ${id}.`);
+            }
+
+            saveAll(); // Guardar localmente después de crear/editar producto
+            clearForm();
+            renderProducts();
+             alert('Producto guardado.');
+        };
+
+
+         stockList.addEventListener('click', function(event) {
+             if (event.target.classList.contains('btn-remove-stock')) {
+                 const rowToRemove = event.target.closest('.row:not(.header)');
+                 if (rowToRemove) {
+                     rowToRemove.remove();
+                      console.log('Fila de stock eliminada del formulario.');
+                 }
+             }
+         });
+
+
+        // --- Funciones Globales (llamadas desde botones en las tarjetas) ---
+
+        window.editProduct = id => {
+            const p = products.find(x => x.id === id);
+            if (!p) return;
+
+            editingId = id;
+            prodName.value = p.name;
+            prodPrice.value = p.price;
+            prodCost.value = p.cost;
+            prodDesc.value = p.desc;
+
+            stockList.querySelectorAll('.row:not(.header)').forEach(row => row.remove());
+
+            p.stock.forEach(s => stockList.appendChild(makeStockRow(s)));
+            console.log(`Editando producto con ID ${id}`);
+
+             paneApp.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.deleteProduct = id => {
+            if (!confirm('¿Estás seguro de eliminar este producto? Esto también eliminará todos los movimientos asociados a él.')) {
+                return;
+            }
+            products = products.filter(x => x.id !== id);
+            movements = movements.filter(m => m.prodId !== id);
+
+            saveAll(); // Guardar localmente después de eliminar
+            renderProducts();
+            if (editingId === id) {
+                clearForm();
+            }
+            alert('Producto eliminado.');
+             console.log(`Producto con ID ${id} eliminado.`);
+        };
+
+        window.shareWhatsApp = id => {
+            const p = products.find(x => x.id === id);
+             if (!p) return;
+
+            let msg = `${p.name}\n`;
+            if (p.price > 0) msg += `$${formatNumberWithSpaces((p.price || 0), 2)}\n`; // Precio con 2 decimales
+            if (p.stock && p.stock.length > 0) {
+                 // Formatear cantidades en el mensaje de WA
+                 msg += `Stock: ${p.stock.map(s => `${s.color}: ${formatNumberWithSpaces((s.julio || 0) + (s.fabian || 0) + (s.marcelo || 0), 0)}`).join(', ')}\n`; // Total de stock por color, sin decimales
+            }
+             if (p.desc) msg += `${p.desc}\n`;
+
+            window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+             console.log(`Compartiendo producto ID ${id} por WhatsApp.`);
+        };
+
+        window.showStockDialog = (action, id) => {
+            dlgAction = action;
+            dlgProdId = id;
+            const p = products.find(x => x.id === id);
+             if (!p) return;
+
+            dlgTitle.textContent = action === 'sell' ? 'Vender stock' : 'Agregar stock';
+
+            dlgColor.innerHTML = p.stock.map(s => `<option value="${s.color}">${s.color}</option>`).join('');
+            if (p.stock.length === 0) {
+                 dlgColor.innerHTML = '<option value="">Sin colores disponibles</option>';
+                 dlgColor.disabled = true;
+                 btnDlgConfirm.disabled = true;
+            } else {
+                 dlgColor.disabled = false;
+                 btnDlgConfirm.disabled = false;
+            }
+
+             dlgQty.value = 1;
+             dlgQty.min = 1;
+
+             dlgUser.innerHTML = users.map(u => `<option value="${u.username.toLowerCase()}">${u.username}</option>`).join('');
+             if (currentUser) {
+                 const option = dlgUser.querySelector(`option[value="${currentUser.toLowerCase()}"]`);
+                 if (option) {
+                     option.selected = true;
+                 }
+             }
+
+            dlg.showModal();
+             console.log(`Mostrando diálogo para acción "${action}" en producto ID ${id}`);
+        };
+
+        dlg.addEventListener('close', () => {
+            if (dlg.returnValue !== 'confirm') {
+                 console.log('Diálogo de stock cancelado.');
+                return;
+            }
+
+            const color = dlgColor.value;
+            const usr = dlgUser.value; // Nombre de usuario en minúsculas (valor del option)
+            const qty = parseInt(dlgQty.value);
+
+            if (!color || !usr || isNaN(qty) || qty < 1) {
+                alert('Datos inválidos para la operación de stock. Por favor, verifica color, usuario y cantidad.');
+                 console.warn('Datos inválidos para operación de stock:', {color, usr, qty});
+                return;
+            }
+
+            const p = products.find(x => x.id === dlgProdId);
+            if (!p) {
+                 console.error('Error: Producto no encontrado para la operación de stock.');
+                alert('Error interno: producto no encontrado.');
+                return;
+            }
+
+            const slot = p.stock.find(s => s.color === color);
+             if (!slot) {
+                 console.error('Error: Color no encontrado en el stock del producto.');
+                 alert('Error interno: color no encontrado en el stock del producto.');
+                 return;
+             }
+
+            let movementRecorded = false;
+
+            if (dlgAction === 'sell') {
+                if ((slot[usr] || 0) < qty) {
+                    alert(`No hay suficiente stock (${slot[usr] || 0}) de ${color} para "${users.find(u => u.username.toLowerCase() === usr)?.username || usr}" para vender ${qty}.`);
+                    console.warn(`Intento de venta con stock insuficiente. Color: ${color}, Usuario: ${usr}, Cantidad solicitada: ${qty}, Stock actual: ${slot[usr] || 0}`);
+                    return;
+                }
+                slot[usr] = (slot[usr] || 0) - qty;
+                movements.push({
+                    user: currentUser,
+                    prodId: p.id,
+                    color: color,
+                    userLocation: usr,
+                    type: 'sell',
+                    qty: qty,
+                    date: Date.now()
+                });
+                 movementRecorded = true;
+                 console.log(`Movimiento: Venta de ${qty} de ${p.name} (${color}) por ${currentUser} (stock de ${usr}).`);
+
+            } else if (dlgAction === 'restock') {
+                slot[usr] = (slot[usr] || 0) + qty;
+                 movements.push({
+                    user: currentUser,
+                    prodId: p.id,
+                    color: color,
+                    userLocation: usr,
+                    type: 'restock',
+                    qty: qty,
+                    date: Date.now()
+                });
+                 movementRecorded = true;
+                 console.log(`Movimiento: Agregar ${qty} de ${p.name} (${color}) por ${currentUser} (asignado a ${usr}).`);
+
+            } else {
+                 console.error('Acción de diálogo desconocida:', dlgAction);
+                 alert('Error interno: acción de stock desconocida.');
+                 return;
+            }
+
+            if (movementRecorded) {
+                saveAll(); // Guardar localmente después de movimiento
+                renderProducts();
+                // alert(`Operación de stock "${dlgAction}" exitosa.`); // Alerta movida para ser menos intrusiva
+            }
+        });
+
+
+    })(); // Fin del IIFE
+    </script>
+</body>
+</html>
